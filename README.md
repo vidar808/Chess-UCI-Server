@@ -1,4 +1,5 @@
 Project Description
+
 This project implements a server in Python designed to interface with various chess engines, enabling remote clients to interact with these engines over a network. It supports multiple chess engines, including Stockfish and Dragon, and provides a framework for logging communications, managing engine options (such as hash size), and handling client requests in real-time.
 
 The server listens for incoming TCP connections on specified ports, each dedicated to a different chess engine. Upon establishing a connection, the server initiates the chess engine process, sets engine options based on client requests or default values, and relays commands and data between the client and the chess engine. It also logs all communications to facilitate debugging and analysis.
