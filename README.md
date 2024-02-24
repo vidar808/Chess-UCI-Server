@@ -10,6 +10,7 @@ Dynamic Hash Size Configuration: Allows setting the engine's hash size dynamical
 Concurrent Client Handling: Utilizes threading to manage multiple client connections simultaneously, ensuring responsive interaction with the chess engines.
 Logging: Logs all communications between the client and the chess engine, aiding in troubleshooting and performance tuning.
 Customizable Engine Options: Supports sending custom UCI commands to configure engine parameters beyond just the hash size.
+
 Contents
 server.py: The main server script that sets up listening sockets, handles incoming connections, and manages the lifecycle of chess engine processes.
 README.md: This file, containing project information and setup instructions.
