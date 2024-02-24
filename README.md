@@ -22,7 +22,7 @@ Clone the Repository:
 
 bash
 Copy code
-git clone https://github.com/yourusername/chess-engine-server.git
+git clone https://github.com/vidar808/ChessUCI.git
 cd chess-engine-server
 Configure Engines:
 
