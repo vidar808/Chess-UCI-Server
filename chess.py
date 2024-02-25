@@ -6,6 +6,7 @@ import os
 # Global configurations
 HOST = '0.0.0.0'
 BASE_LOG_DIR = r"C:\Users\administrator\Desktop\chess\LOG"
+ENABLE_FILE_LOGGING = False  # Set to False to disable file logging
 
 # Define custom variables and their values
 CUSTOM_VARIABLES = {
@@ -36,8 +37,9 @@ def engine_communication(engine_process, client_connection, log_file):
             log_message = f"Engine: {data.strip()}\n"
             print(log_message, end='')
             client_connection.sendall(data.encode('utf-8'))
-            with open(log_file, "a") as f:
-                f.write(log_message)
+            if ENABLE_FILE_LOGGING:
+                with open(log_file, "a") as f:
+                    f.write(log_message)
     except Exception as e:
         print(f"Error communicating with client: {e}")
     finally:
@@ -86,8 +88,9 @@ def client_handler(client_socket, engine_path, log_file):
 
             engine_process.stdin.flush()
             print(log_message, end='')
-            with open(log_file, "a") as f:
-                f.write(log_message)
+            if ENABLE_FILE_LOGGING:
+                with open(log_file, "a") as f:
+                    f.write(log_message)
 
             if client_data == "isready":
                 ready_to_close = True
@@ -131,4 +134,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
