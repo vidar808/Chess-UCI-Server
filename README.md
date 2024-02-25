@@ -19,25 +19,47 @@ Prerequisites
 Python 3.6 or later.
 Chess engines (e.g., Stockfish, Dragon) compatible with the UCI protocol.
 Setup
-Clone the Repository:
-
-bash
-Copy code
-git clone https://github.com/vidar808/ChessUCI.git
-cd chess-engine-server
-Configure Engines:
 
 Place your chess engine executables in a known directory.
-Modify the engines dictionary in server.py to specify the paths to your chess engine executables and the ports they should listen on.
+Modify the engines dictionary in chess.py to specify the paths to your chess engine executables and the ports they should listen on.
 Run the Server:
 
-bash
-Copy code
-python server.py
-Adjust server.py to point to your specific engine paths and desired listening ports.
+Plase chess.py in a directory and run from the commandline 
+
+From command line run:
+python chess.py
+Adjust chess.py to point to your specific engine paths and desired listening ports.
 
 Usage
 Connect to the server using any TCP client capable of sending and receiving text data, such as a custom chess GUI or a simple telnet client. Send commands according to the UCI protocol, and the server will relay these commands to the specified chess engine and return the engine's responses.
 
 Contributing
 Contributions are welcome! Please feel free to submit pull requests with bug fixes, improvements, or additional features.
+
+
+The configuration is as follows:
+
+# Global configurations
+HOST = '0.0.0.0' # to be accessible from any remote host
+BASE_LOG_DIR = r"C:\Users\administrator\Desktop\chess\LOG" # the location where UCI communication logs are saved if logging is enabled.
+ENABLE_FILE_LOGGING = False  # Set to False to disable file logging
+
+# Define custom variables and their values
+CUSTOM_VARIABLES = {
+    "Hash": "16384",
+    "Threads": "32",
+    # Add more custom variables here as needed
+}
+
+# Define engines and their configurations. (Engine name, Engine file location, communication port)
+ENGINES = {
+        "Dragon": {"path": r"C:\Users\administrator\Desktop\chess\dragon-3.3_fb79bacb\Windows\dragon-3.3-64bit-avx2.exe", "port": 9999},
+        "Stockfish": {"path": r"C:\Users\administrator\Desktop\chess\stockfish 16\stockfish-windows-x86-64-avx2.exe", "port": 9998},
+        "Berserk": {"path": r"C:\Users\administrator\Desktop\chess\berserk 12.1\berserk-12-x64-avx2.exe", "port": 9997},
+        "Tal": {"path": r"C:\Users\administrator\Desktop\chess\Chess-System-Tal-2.00-v21\Chess-System-Tal-2.00-v21-E1162-130-EAS.opt-avx2.exe", "port": 9996},
+        "Shash": {"path": r"C:\Users\administrator\Desktop\chess\ShashChess 34\ShashChess34.6-x86-64-bmi2.exe", "port": 9995},
+        "Ethereal": {"path": r"C:\Users\administrator\Desktop\chess\Ethereal 14.2\Windows\Ethereal-14.25-avx2.exe", "port": 9994},
+        "Caissa": {"path": r"C:\Users\administrator\Desktop\chess\Caissa 1.15\Caissa 1.15\caissa-1.15-x64-avx2-bmi2.exe", "port": 9993},
+        "Rubi": {"path": r"C:\Users\administrator\Desktop\chess\RubiChess-20240112\windows\RubiChess-20240112_x86-64-bmi2.exe", "port": 9992},
+    # Add more engines here as needed
+}
