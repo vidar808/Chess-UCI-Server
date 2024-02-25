@@ -1,4 +1,4 @@
-Project Description
+# Project Description
 
 This project aims to implement a server in Python designed to interface with various chess engines, enabling remote clients to interact with these engines over a network. It supports multiple chess engines, including Stockfish, and provides a framework for logging communications, managing engine options (such as hash size), and handling client requests in real-time.
 
