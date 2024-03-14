@@ -1,138 +1,175 @@
-import socket
-import subprocess
-import threading
+import asyncio
+import json
+import logging
 import os
+import subprocess
 
-# Global configurations
-HOST = '0.0.0.0'
-BASE_LOG_DIR = r"C:\Users\administrator\Desktop\chess\LOG"
-ENABLE_FILE_LOGGING = False  # Set to False to disable file logging
+# Load configurations from config.json
+with open("config.json") as f:
+    config = json.load(f)
 
-# Define custom variables and their values
-CUSTOM_VARIABLES = {
-    "Hash": "16384",
-    "Threads": "32",
-    # Add more custom variables here as needed
-}
+HOST = config["host"]
+BASE_LOG_DIR = config["base_log_dir"]
+ENGINES = config["engines"]
+CUSTOM_VARIABLES = config["custom_variables"]
+MAX_CONNECTIONS = config["max_connections"]
 
-# Define engines and their configurations
-ENGINES = {
-        "Dragon": {"path": r"C:\Users\administrator\Desktop\chess\dragon-3.3_fb79bacb\Windows\dragon-3.3-64bit-avx2.exe", "port": 9999},
-        "Stockfish": {"path": r"C:\Users\administrator\Desktop\chess\stockfish 16\stockfish-windows-x86-64-avx2.exe", "port": 9998},
-        "Berserk": {"path": r"C:\Users\administrator\Desktop\chess\berserk 12.1\berserk-12-x64-avx2.exe", "port": 9997},
-        "Tal": {"path": r"C:\Users\administrator\Desktop\chess\Chess-System-Tal-2.00-v21\Chess-System-Tal-2.00-v21-E1162-130-EAS.opt-avx2.exe", "port": 9996},
-        "Shash": {"path": r"C:\Users\administrator\Desktop\chess\ShashChess 34\ShashChess34.6-x86-64-bmi2.exe", "port": 9995},
-        "Ethereal": {"path": r"C:\Users\administrator\Desktop\chess\Ethereal 14.2\Windows\Ethereal-14.25-avx2.exe", "port": 9994},
-        "Caissa": {"path": r"C:\Users\administrator\Desktop\chess\Caissa 1.15\Caissa 1.15\caissa-1.15-x64-avx2-bmi2.exe", "port": 9993},
-        "Rubi": {"path": r"C:\Users\administrator\Desktop\chess\RubiChess-20240112\windows\RubiChess-20240112_x86-64-bmi2.exe", "port": 9992},
-    # Add more engines here as needed
-}
+# Configure logging
+server_log_file = os.path.join(BASE_LOG_DIR, "server.log")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(server_log_file),
+        logging.StreamHandler()
+    ]
+)
 
-def engine_communication(engine_process, client_connection, log_file):
-    try:
-        while True:
-            data = engine_process.stdout.readline()
-            if not data:
-                break
-            log_message = f"Engine: {data.strip()}\n"
-            print(log_message, end='')
-            client_connection.sendall(data.encode('utf-8'))
-            if ENABLE_FILE_LOGGING:
+sem = asyncio.Semaphore(MAX_CONNECTIONS)
+
+async def engine_communication(engine_process, writer, log_file):
+    while True:
+        data = await engine_process.stdout.readline()
+        if not data:
+            break
+
+        log_message = f"Engine: {data.decode().strip()}\n"
+        logging.info(log_message)
+
+        writer.write(data)
+        await writer.drain()
+
+        with open(log_file, "a") as f:
+            f.write(log_message)
+
+async def client_handler(reader, writer, engine_path, log_file):
+    client_ip = writer.get_extra_info('peername')[0]
+    logging.info(f"Connection opened from {client_ip}")
+
+    if config["enable_trusted_sources"] and client_ip not in config["trusted_sources"]:
+        logging.warning(f"Untrusted connection attempt from {client_ip}")
+        print(f"Untrusted connection attempt from {client_ip}")
+        writer.close()
+        logging.info(f"Connection closed for untrusted source {client_ip}")
+        return
+
+    async with sem:
+        try:
+            engine_dir = os.path.dirname(engine_path)
+            logging.info(f"Initiating engine {engine_path} for client {client_ip}")
+
+            engine_process = await asyncio.create_subprocess_exec(
+                engine_path,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                cwd=engine_dir
+            )
+
+            async def process_command(command):
+                engine_process.stdin.write(f"{command}\n".encode())
+                await engine_process.stdin.drain()
                 with open(log_file, "a") as f:
-                    f.write(log_message)
-    except Exception as e:
-        print(f"Error communicating with client: {e}")
-    finally:
-        client_connection.close()
+                    f.write(f"Client: {command}\n")
+                if config["display_uci_communication"]:
+                    print(f"Client: {command}")
 
-def client_handler(client_socket, engine_path, log_file):
-    try:
-        engine_dir = os.path.dirname(engine_path)
-        
-        engine_process = subprocess.Popen(
-            [engine_path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-            cwd=engine_dir
-        )
+            async def process_uci_command():
+                await process_command("uci")
+                while True:
+                    data = await engine_process.stdout.readline()
+                    if not data:
+                        break
+                    decoded_data = data.decode().strip()
+                    writer.write(data)
+                    await writer.drain()
+                    with open(log_file, "a") as f:
+                        f.write(f"Engine: {decoded_data}\n")
+                    if config["display_uci_communication"]:
+                        print(f"Engine: {decoded_data}")
+                    if "uciok" in decoded_data:
+                        break
 
-        def engine_to_client():
-            engine_communication(engine_process, client_socket, log_file)
+            await process_uci_command()
 
-        engine_thread = threading.Thread(target=engine_to_client)
-        engine_thread.start()
+            async def process_client_commands():
+                while True:
+                    data = await reader.readline()
+                    if not data:
+                        break
 
-        engine_process.stdin.write("uci\n")
-        engine_process.stdin.flush()
+                    client_data = data.decode().strip()
+                    commands = client_data.split('\n')
 
-        ready_to_close = False
+                    for command in commands:
+                        command = command.strip()
+                        if command:
+                            if command.startswith('setoption name'):
+                                parts = command.split(' ')
+                                if len(parts) >= 5 and parts[1] == 'name' and parts[3] == 'value':
+                                    option_name = parts[2]
+                                    option_value = ' '.join(parts[4:])
+                                    if option_name in CUSTOM_VARIABLES:
+                                        modified_command = f"setoption name {option_name} value {CUSTOM_VARIABLES[option_name]}"
+                                        await process_command(modified_command)
+                                    else:
+                                        await process_command(command)
+                                else:
+                                    await process_command(command)
+                            else:
+                                await process_command(command)
 
-        while True:
-            client_data = client_socket.recv(1024).decode('utf-8').strip()
-            if not client_data:
-                break
+            async def process_engine_responses():
+                while True:
+                    data = await engine_process.stdout.readline()
+                    if not data:
+                        break
+                    decoded_data = data.decode().strip()
+                    writer.write(data)
+                    await writer.drain()
+                    with open(log_file, "a") as f:
+                        f.write(f"Engine: {decoded_data}\n")
+                    if config["display_uci_communication"]:
+                        print(f"Engine: {decoded_data}")
 
-            for option, value in CUSTOM_VARIABLES.items():
-                if client_data.startswith(f"setoption name {option} value"):
-                    modified_command = f"setoption name {option} value {value}"
-                    engine_process.stdin.write(f"{modified_command}\n")
-                    log_message = f"Client: {modified_command} (modified)\n"
-                    break
-            else:
-                engine_process.stdin.write(f"{client_data}\n")
-                log_message = f"Client: {client_data}\n"
+            await asyncio.gather(process_client_commands(), process_engine_responses())
 
-            engine_process.stdin.flush()
-            print(log_message, end='')
-            if ENABLE_FILE_LOGGING:
-                with open(log_file, "a") as f:
-                    f.write(log_message)
+        except ConnectionResetError:
+            logging.info(f"Client {client_ip} disconnected")
+        except Exception as e:
+            logging.error(f"Error in client_handler for client {client_ip}: {e}")
 
-            if client_data == "isready":
-                ready_to_close = True
+        finally:
+            engine_process.terminate()
+            await engine_process.wait()
+            writer.close()
+            logging.info(f"Connection closed for client {client_ip}")
+            
+            
 
-        if ready_to_close:
-            while True:
-                data = engine_process.stdout.readline()
-                if "readyok" in data:
-                    break
+async def start_server(host, port, engine_path, log_file):
+    server = await asyncio.start_server(
+        lambda r, w: client_handler(r, w, engine_path, log_file),
+        host, port)
 
-    except Exception as e:
-        print(f"Error in client_handler: {e}")
-    finally:
-        engine_process.terminate()
-        client_socket.close()
+    addr = server.sockets[0].getsockname()
+    logging.info(f"Server listening on {addr} for engine {engine_path}")
 
-def start_server(host, port, engine_path, log_file):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind((host, port))
-        server_socket.listen()
-        print(f"Server listening on {host}:{port} for engine {engine_path}")
+    async with server:
+        await server.serve_forever()
 
-        while True:
-            client_connection, _ = server_socket.accept()
-            threading.Thread(target=client_handler, args=(client_connection, engine_path, log_file), daemon=True).start()
-
-def main():
+async def main():
     if not os.path.exists(BASE_LOG_DIR):
         os.makedirs(BASE_LOG_DIR)
 
-    threads = []
+    tasks = []
     for engine_name, details in ENGINES.items():
         log_file = os.path.join(BASE_LOG_DIR, f"communication_log_{engine_name}.txt")
-        thread = threading.Thread(target=start_server, args=(HOST, details["port"], details["path"], log_file), daemon=True)
-        thread.start()
-        threads.append(thread)
-        print(f"Started server for {engine_name} on port {details['port']}")
+        task = asyncio.create_task(start_server(HOST, details["port"], details["path"], log_file))
+        tasks.append(task)
+        logging.info(f"Started server for {engine_name} on port {details['port']}")
 
-    for thread in threads:
-        thread.join()  # Wait for all server threads to finish (they won't unless manually stopped)
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    main()
-
-
+    asyncio.run(main())
