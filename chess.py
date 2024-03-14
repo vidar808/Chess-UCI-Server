@@ -53,18 +53,21 @@ async def engine_communication(engine_process, writer, log_file):
 async def client_handler(reader, writer, engine_path, log_file):
     client_ip = writer.get_extra_info('peername')[0]
     logging.info(f"Connection opened from {client_ip}")
+    print(f"Connection opened from {client_ip}")
 
     if config["enable_trusted_sources"] and client_ip not in config["trusted_sources"]:
         logging.warning(f"Untrusted connection attempt from {client_ip}")
         print(f"Untrusted connection attempt from {client_ip}")
         writer.close()
         logging.info(f"Connection closed for untrusted source {client_ip}")
+        print(f"Connection closed for untrusted source {client_ip}")
         return
 
     async with sem:
         try:
             engine_dir = os.path.dirname(engine_path)
             logging.info(f"Initiating engine {engine_path} for client {client_ip}")
+            print(f"Initiating engine {engine_path} for client {client_ip}")
 
             engine_process = await asyncio.create_subprocess_exec(
                 engine_path,
@@ -80,7 +83,7 @@ async def client_handler(reader, writer, engine_path, log_file):
                 if config["enable_uci_log"]:
                     with open(log_file, "a") as f:
                         f.write(f"Client: {command}\n")
-                if config["enable_console_communication"]:
+                if config["detailed_log_verbosity"]:
                     print(f"Client: {command}")
 
             async def process_uci_command():
@@ -95,7 +98,7 @@ async def client_handler(reader, writer, engine_path, log_file):
                     if config["enable_uci_log"]:
                         with open(log_file, "a") as f:
                             f.write(f"Engine: {decoded_data}\n")
-                    if config["enable_console_communication"]:
+                    if config["detailed_log_verbosity"]:
                         print(f"Engine: {decoded_data}")
                     if "uciok" in decoded_data:
                         break
@@ -140,21 +143,24 @@ async def client_handler(reader, writer, engine_path, log_file):
                     if config["enable_uci_log"]:
                         with open(log_file, "a") as f:
                             f.write(f"Engine: {decoded_data}\n")
-                    if config["enable_console_communication"]:
+                    if config["detailed_log_verbosity"]:
                         print(f"Engine: {decoded_data}")
 
             await asyncio.gather(process_client_commands(), process_engine_responses())
 
         except ConnectionResetError:
             logging.info(f"Client {client_ip} disconnected")
+            print(f"Client {client_ip} disconnected")
         except Exception as e:
             logging.error(f"Error in client_handler for client {client_ip}: {e}")
+            print(f"Error in client_handler for client {client_ip}: {e}")
 
         finally:
             engine_process.terminate()
             await engine_process.wait()
             writer.close()
             logging.info(f"Connection closed for client {client_ip}")
+            print(f"Connection closed for client {client_ip}")
             
             
 
