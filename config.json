@@ -5,14 +5,15 @@
   "enable_trusted_sources": true,
   "enable_server_log": false,
   "enable_uci_log": false,
-  "enable_console_communication": false,
+  "detailed_log_verbosity": true,
   "custom_variables": {
-    "Hash": "32000"
+  "Hash": "32000"
   },
   "max_connections": 10,
   "trusted_sources": [
     "127.0.0.1",
-    "172.56.44.181"
+    "172.56.44.181",
+	  "192.168.141.1"
   ],
   "engines": {
     "Dragon": {
