@@ -15,16 +15,24 @@ CUSTOM_VARIABLES = config["custom_variables"]
 MAX_CONNECTIONS = config["max_connections"]
 
 # Configure logging
-server_log_file = os.path.join(BASE_LOG_DIR, "server.log")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(server_log_file),
-        logging.StreamHandler()
-    ]
-)
-
+if config["enable_server_log"]:
+    server_log_file = os.path.join(BASE_LOG_DIR, "server.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(server_log_file),
+            logging.StreamHandler()
+        ]
+    )
+else:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
 sem = asyncio.Semaphore(MAX_CONNECTIONS)
 
 async def engine_communication(engine_process, writer, log_file):
@@ -69,9 +77,10 @@ async def client_handler(reader, writer, engine_path, log_file):
             async def process_command(command):
                 engine_process.stdin.write(f"{command}\n".encode())
                 await engine_process.stdin.drain()
-                with open(log_file, "a") as f:
-                    f.write(f"Client: {command}\n")
-                if config["display_uci_communication"]:
+                if config["enable_uci_log"]:
+                    with open(log_file, "a") as f:
+                        f.write(f"Client: {command}\n")
+                if config["enable_console_communication"]:
                     print(f"Client: {command}")
 
             async def process_uci_command():
@@ -83,9 +92,10 @@ async def client_handler(reader, writer, engine_path, log_file):
                     decoded_data = data.decode().strip()
                     writer.write(data)
                     await writer.drain()
-                    with open(log_file, "a") as f:
-                        f.write(f"Engine: {decoded_data}\n")
-                    if config["display_uci_communication"]:
+                    if config["enable_uci_log"]:
+                        with open(log_file, "a") as f:
+                            f.write(f"Engine: {decoded_data}\n")
+                    if config["enable_console_communication"]:
                         print(f"Engine: {decoded_data}")
                     if "uciok" in decoded_data:
                         break
@@ -127,9 +137,10 @@ async def client_handler(reader, writer, engine_path, log_file):
                     decoded_data = data.decode().strip()
                     writer.write(data)
                     await writer.drain()
-                    with open(log_file, "a") as f:
-                        f.write(f"Engine: {decoded_data}\n")
-                    if config["display_uci_communication"]:
+                    if config["enable_uci_log"]:
+                        with open(log_file, "a") as f:
+                            f.write(f"Engine: {decoded_data}\n")
+                    if config["enable_console_communication"]:
                         print(f"Engine: {decoded_data}")
 
             await asyncio.gather(process_client_commands(), process_engine_responses())
