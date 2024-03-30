@@ -2,6 +2,8 @@
 
 This project implements a server in Python that interfaces with various chess engines, allowing remote clients to interact with these engines over a network. The server supports multiple chess engines, including popular ones like Stockfish and Dragon, and provides a flexible framework for logging communications, managing engine options, and handling client requests in real-time.
 
+ChessServer.exe will run the server on wiindows without python. Config.json file is required to be in the same directory.
+
 ## Key Features
 
 1. **Multi-Engine Support**: The server is compatible with any chess engine that adheres to the Universal Chess Interface (UCI) protocol, making it versatile and adaptable to different engines.
