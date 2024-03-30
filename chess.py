@@ -278,8 +278,12 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
         finally:
             inactivity_task.cancel()
             heartbeat_task.cancel()
-            engine_process.terminate()
-            await engine_process.wait()
+            try:
+                engine_process.terminate()
+                await engine_process.wait()
+            except ProcessLookupError:
+                logging.warning(f"ProcessLookupError occurred while terminating the engine process for client {client_ip}")
+                print(f"ProcessLookupError occurred while terminating the engine process for client {client_ip}")
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -288,9 +292,6 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
                 print(f"ConnectionResetError occurred while closing the connection for client {client_ip}")
             logging.info(f"Connection closed for client {client_ip}")
             print(f"Connection closed for client {client_ip}")
-                    
-            engine_process.terminate()
-            await engine_process.wait()  # Ensure the engine process is properly terminated
             
             
 
@@ -323,11 +324,17 @@ async def start_server(host, port, engine_path, log_file, engine_name):
                 break
 
 
-
-
 async def main():
-    if not os.path.exists(BASE_LOG_DIR):
-        os.makedirs(BASE_LOG_DIR)
+    BASE_LOG_DIR = "LOG"  # Initialize with a default value
+
+    if config["enable_server_log"] or config["enable_uci_log"]:
+        if not os.path.exists(BASE_LOG_DIR):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            log_dir = os.path.join(script_dir, "LOG")
+            os.makedirs(log_dir, exist_ok=True)
+            BASE_LOG_DIR = log_dir
+        else:
+            os.makedirs(BASE_LOG_DIR, exist_ok=True)
 
     tasks = []
     for engine_name, details in ENGINES.items():
