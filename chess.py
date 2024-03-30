@@ -280,11 +280,15 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
             heartbeat_task.cancel()
             engine_process.terminate()
             await engine_process.wait()
-            writer.close()
-            await writer.wait_closed()
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except ConnectionResetError:
+                logging.warning(f"ConnectionResetError occurred while closing the connection for client {client_ip}")
+                print(f"ConnectionResetError occurred while closing the connection for client {client_ip}")
             logging.info(f"Connection closed for client {client_ip}")
             print(f"Connection closed for client {client_ip}")
-            
+                    
             engine_process.terminate()
             await engine_process.wait()  # Ensure the engine process is properly terminated
             
