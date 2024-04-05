@@ -7,7 +7,11 @@
   "enable_server_log": true,
   "enable_uci_log": true,
   "detailed_log_verbosity": true,
-  "enable_blocklist": true,
+  "enable_firewall_subnet_blocking": true,
+  "enable_firewall_ip_blocking": true,
+  "max_connection_attempts": 2,
+  "connection_attempt_period": 3600,
+  "Log_untrusted_connection_attempts": true,
   "custom_variables": {
     "Hash": "32000",
     "Threads": "32",
@@ -16,7 +20,7 @@
   "max_connections": 10,
   "trusted_sources": [
     "127.0.0.1",
-    "192.168.141.1"
+    "50.113.3.127"
   ],
   "trusted_subnets": [
     "172.56.44.0/24"
@@ -32,26 +36,6 @@
       "custom_variables": {
         "Threads": "40"
       }
-    },
-    "Berserk": {
-      "path": "C:\\Users\\administrator\\Desktop\\chess\\berserk 12.1\\berserk-12-x64-avx2.exe",
-      "port": 9997
-    },
-    "Shash": {
-      "path": "C:\\Users\\administrator\\Desktop\\chess\\ShashChess 34\\ShashChess34.6-x86-64-bmi2.exe",
-      "port": 9995
-    },
-    "Ethereal": {
-      "path": "C:\\Users\\administrator\\Desktop\\chess\\Ethereal 14.2\\Windows\\Ethereal-14.25-avx2.exe",
-      "port": 9994
-    },
-    "Caissa": {
-      "path": "C:\\Users\\administrator\\Desktop\\chess\\Caissa 1.15\\Caissa 1.15\\caissa-1.15-x64-avx2-bmi2.exe",
-      "port": 9993
-    },
-    "Rubi": {
-      "path": "C:\\Users\\administrator\\Desktop\\chess\\RubiChess-20240112\\windows\\RubiChess-20240112_x86-64-bmi2.exe",
-      "port": 9992
     }
   }
 }
