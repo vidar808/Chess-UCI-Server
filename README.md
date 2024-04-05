@@ -57,6 +57,40 @@ Getting Started To run the server, follow these steps:
 2.	Configure the server by modifying the config.json file according to your setup. Specify the paths to your chess engine executables, desired ports, trusted sources, firewall settings, and other configuration options.
 3.	Place the chess.py script in a directory of your choice and run it from the command line using the following command:
 python chess.py
+
 The server will start listening for incoming connections on the specified ports. You can now connect to the server using any UCI-compatible chess client or a telnet client.
+
+modifying config.json
+1.	host: Specifies the IP address or hostname on which the server listens for incoming connections. Set it to "0.0.0.0" to listen on all available network interfaces.
+2.	base_log_dir: Specifies the directory where log files will be stored. Provide the desired path for storing the log files.
+3.	display_uci_communication: Set it to true to display the UCI communication between clients and chess engines in real-time on the console. Set it to false to disable this feature.
+4.	enable_trusted_sources: Set it to true to enforce access restrictions based on the trusted sources list. Only client IPs specified in the trusted_sources array will be allowed to connect to the server. Set it to false to disable this feature.
+5.	enable_auto_trust: Set it to true to automatically add client IP addresses to the trusted sources list when they send the "uci" command. Set it to false to disable this feature.
+6.	enable_server_log: Set it to true to generate a log file named "server.log" that captures server events and exceptions. Set it to false to disable server logging.
+7.	enable_uci_log: Set it to true to generate separate log files for each chess engine, capturing the UCI communication between clients and engines. Set it to false to disable UCI logging.
+8.	detailed_log_verbosity: Set it to true to include detailed information in the logs, such as UCI commands and responses. Set it to false to log only basic information.
+9.	enable_firewall_subnet_blocking: Set it to true to automatically configure firewall rules to block untrusted subnet traffic. Set it to false to disable this feature.
+10.	enable_firewall_ip_blocking: Set it to true to automatically block individual IP addresses based on the specified connection attempt thresholds. Set it to false to disable this feature.
+11.	max_connection_attempts: Specifies the maximum number of connection attempts allowed from an untrusted IP address within the specified time period.
+12.	connection_attempt_period: Specifies the time period (in seconds) for monitoring connection attempts from untrusted IP addresses.
+13.	Log_untrusted_connection_attempts: Set it to true to log details of untrusted connection attempts in a separate log file. Set it to false to disable logging of untrusted connection attempts.
+14.	custom_variables: Specifies custom UCI options that will be sent to all chess engines upon initialization. Provide key-value pairs for the desired options.
+15.	max_connections: Specifies the maximum number of concurrent client connections allowed by the server.
+16.	trusted_sources: An array of IP addresses that are allowed to connect to the server when enable_trusted_sources is set to true. Add the desired IP addresses to this array.
+17.	trusted_subnets: An array of IP subnets that are allowed to connect to the server when enable_trusted_sources is set to true. Add the desired subnets in CIDR notation to this array.
+18.	engines: A dictionary specifying the configuration for each supported chess engine.
+•	path: Specifies the path to the chess engine executable.
+•	port: Specifies the port number on which the engine will listen for incoming connections.
+•	custom_variables (optional): Specifies custom UCI options specific to the engine. Provide key-value pairs for the desired options.
+To configure the config.json file:
+1.	Open the config.json file in a text editor.
+2.	Update the values of the configuration options according to your requirements and environment.
+3.	Ensure that the paths to the chess engine executables are correct and the engines are accessible.
+4.	Save the config.json file after making the necessary changes.
+5.	Place the config.json file in the same directory as the chess.py script.
+6.	Run the chess.py script, and the server will start with the specified configuration.
+Note: Make sure to escape backslashes (\) in file paths by using double backslashes (\\) in the JSON configuration.
+Remember to restart the server after making changes to the config.json file for the new configuration to take effect.
+
 
 Conclusion This project provides a comprehensive and feature-rich server solution for interfacing with various chess engines over a network. With its extensive logging capabilities, advanced security features, and flexible configuration options, it offers a robust platform for managing and interacting with chess engines in a controlled and secure environment. Whether you are a chess enthusiast, a developer working on chess-related applications, or a researcher exploring the world of computer chess, this server provides a solid foundation for your endeavors.
