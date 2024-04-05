@@ -54,9 +54,9 @@ Configuration (config.json) The server's configuration is defined in the config.
 
 Getting Started To run the server, follow these steps:
 1.	Ensure that you have Python 3.7 or later installed on your system.
-2.	Install the required dependencies by running the following command:
-pip install -r requirements.txt
-3.	Configure the server by modifying the config.json file according to your setup. Specify the paths to your chess engine executables, desired ports, trusted sources, firewall settings, and other configuration options.
-4.	Place the chess.py script in a directory of your choice and run it from the command line using the following command: python chess.py
+2.	Configure the server by modifying the config.json file according to your setup. Specify the paths to your chess engine executables, desired ports, trusted sources, firewall settings, and other configuration options.
+3.	Place the chess.py script in a directory of your choice and run it from the command line using the following command:
+python chess.py
 The server will start listening for incoming connections on the specified ports. You can now connect to the server using any UCI-compatible chess client or a telnet client.
+
 Conclusion This project provides a comprehensive and feature-rich server solution for interfacing with various chess engines over a network. With its extensive logging capabilities, advanced security features, and flexible configuration options, it offers a robust platform for managing and interacting with chess engines in a controlled and secure environment. Whether you are a chess enthusiast, a developer working on chess-related applications, or a researcher exploring the world of computer chess, this server provides a solid foundation for your endeavors.
