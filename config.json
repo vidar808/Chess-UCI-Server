@@ -7,6 +7,7 @@
   "enable_server_log": false,
   "enable_uci_log": false,
   "detailed_log_verbosity": true,
+  "enable_firewall_rules": true,
   "enable_firewall_subnet_blocking": false,
   "enable_firewall_ip_blocking": false,
   "max_connection_attempts": 2,
