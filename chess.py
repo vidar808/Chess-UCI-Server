@@ -24,14 +24,25 @@ connection_attempts = {}
 # Configure logging
 if config["enable_server_log"]:
     server_log_file = os.path.join(BASE_LOG_DIR, "server.log")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(server_log_file),
-            logging.StreamHandler()
-        ]
-    )
+    try:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            handlers=[
+                logging.FileHandler(server_log_file),
+                logging.StreamHandler()
+            ]
+        )
+    except Exception as e:
+        print(f"Error configuring logging: {e}")
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            handlers=[
+                logging.StreamHandler()
+            ]
+        )
+        logging.error(f"Error configuring file logging: {e}")
 else:
     logging.basicConfig(
         level=logging.INFO,
@@ -483,18 +494,52 @@ async def start_server(host, port, engine_path, log_file, engine_name):
 
 
 async def main():
-    BASE_LOG_DIR = "LOG"  # Initialize with a default value
-
-    await configure_firewall(config)
+    BASE_LOG_DIR = config.get("base_log_dir", "")
 
     if config["enable_server_log"] or config["enable_uci_log"]:
-        if not os.path.exists(BASE_LOG_DIR):
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            log_dir = os.path.join(script_dir, "LOG")
-            os.makedirs(log_dir, exist_ok=True)
-            BASE_LOG_DIR = log_dir
+        if not BASE_LOG_DIR:
+            # If base_log_dir is not set or is blank in the config, use the script's directory for logging
+            BASE_LOG_DIR = os.path.dirname(os.path.abspath(__file__))
         else:
-            os.makedirs(BASE_LOG_DIR, exist_ok=True)
+            try:
+                # Try to create the log directory specified in config.json
+                os.makedirs(BASE_LOG_DIR, exist_ok=True)
+            except (FileNotFoundError, PermissionError) as e:
+                # If the script doesn't have write permissions or the specified path is invalid,
+                # update BASE_LOG_DIR to the script's directory
+                logging.error(f"Error creating log directory: {e}")
+                logging.error("Updating log directory to the script's directory.")
+                BASE_LOG_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    if config["enable_server_log"]:
+        server_log_file = os.path.join(BASE_LOG_DIR, "server.log")
+        try:
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s [%(levelname)s] %(message)s",
+                handlers=[
+                    logging.FileHandler(server_log_file),
+                    logging.StreamHandler()
+                ]
+            )
+        except Exception as e:
+            print(f"Error configuring logging: {e}")
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s [%(levelname)s] %(message)s",
+                handlers=[
+                    logging.StreamHandler()
+                ]
+            )
+            logging.error(f"Error configuring file logging: {e}")
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            handlers=[
+                logging.StreamHandler()
+            ]
+        )
 
     tasks = []
     for engine_name, details in ENGINES.items():
