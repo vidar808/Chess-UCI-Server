@@ -1,6 +1,6 @@
 Project Description 
 
-This project implements a robust and feature-rich server in Python that seamlessly interfaces with various chess engines, enabling remote clients to interact with these engines over a network. The server boasts a wide range of capabilities, including support for multiple chess engines, flexible logging options, dynamic engine configuration, and advanced security features. It provides a comprehensive solution for managing and interacting with chess engines in a networked environment.
+This project seeks to develop a server in Python that seamlessly interfaces with various chess engines, enabling remote clients to interact with these engines over a network. The server boasts a wide range of capabilities, including support for multiple chess engines, flexible logging options, dynamic engine configuration, and advanced security features. It provides a comprehensive solution for managing and interacting with chess engines in a networked environment. It has been specifically designed to work with Droidfish but should work with any client that communicates via UCI. The server communicates in clear text and utilizes various schemes to secure the ports used by the server. These must be enabled in config.json. 
 
 Key Features
 1.	Multi-Engine Support:
@@ -65,7 +65,7 @@ modifying config.json
 2.	base_log_dir: Specifies the directory where log files will be stored. Provide the desired path for storing the log files.
 3.	display_uci_communication: Set it to true to display the UCI communication between clients and chess engines in real-time on the console. Set it to false to disable this feature.
 4.	enable_trusted_sources: Set it to true to enforce access restrictions based on the trusted sources list. Only client IPs specified in the trusted_sources array will be allowed to connect to the server. Set it to false to disable this feature.
-5.	enable_auto_trust: Set it to true to automatically add client IP addresses to the trusted sources list when they send the "uci" command. Set it to false to disable this feature.
+5.	enable_auto_trust: Set it to true to automatically add client IP addresses to the trusted sources list in config.json when they send the "uci" command during initialization. Set it to false to disable this feature.
 6.	enable_server_log: Set it to true to generate a log file named "server.log" that captures server events and exceptions. Set it to false to disable server logging.
 7.	enable_uci_log: Set it to true to generate separate log files for each chess engine, capturing the UCI communication between clients and engines. Set it to false to disable UCI logging.
 8.	detailed_log_verbosity: Set it to true to include detailed information in the logs, such as UCI commands and responses. Set it to false to log only basic information.
@@ -92,5 +92,10 @@ To configure the config.json file:
 Note: Make sure to escape backslashes (\) in file paths by using double backslashes (\\) in the JSON configuration.
 Remember to restart the server after making changes to the config.json file for the new configuration to take effect.
 
+Network configuration:
+Your system router will need port forwarding enabled on the specified ports to forward traffic to the chess engine.
+
+ChessServer.exe is a self-enclosed version of the Python script which should be able to run without installing Python.
+The config.json will still need to be in the same directory as ChessServer.exe and config.json will need to be configured to your specific environment.
 
 Conclusion This project provides a comprehensive and feature-rich server solution for interfacing with various chess engines over a network. With its extensive logging capabilities, advanced security features, and flexible configuration options, it offers a robust platform for managing and interacting with chess engines in a controlled and secure environment. Whether you are a chess enthusiast, a developer working on chess-related applications, or a researcher exploring the world of computer chess, this server provides a solid foundation for your endeavors.
