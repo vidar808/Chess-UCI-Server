@@ -192,7 +192,6 @@ def check_connection_attempts(client_ip):
             logging.warning(f"Blocking IP {client_ip} due to excessive connection attempts")
             ports = ",".join(str(engine["port"]) for engine in ENGINES.values())
             asyncio.create_task(block_ip_address(client_ip, ports))
-            connection_attempts.pop(client_ip, None)
 
         # Log IP blocking event
         if config["Log_untrusted_connection_attempts"]:
@@ -200,11 +199,14 @@ def check_connection_attempts(client_ip):
             logging.warning(log_message)
             with open(os.path.join(BASE_LOG_DIR, "untrusted_connection_attempts.log"), "a") as f:
                 f.write(log_message + "\n")
+
+        # Remove the blocked IP from the connection_attempts dictionary
+        connection_attempts.pop(client_ip, None)
         
         
 
 async def configure_firewall(config):
-    if not config.get("enable_firewall_subnet_blocking", False):
+    if not config.get("enable_firewall_rules", False):
         logging.info("Firewall rules configuration is disabled. Skipping.")
         return
 
@@ -213,35 +215,37 @@ async def configure_firewall(config):
     ip_addresses_to_avoid = config["trusted_sources"]
     subnets_to_avoid = config["trusted_subnets"]
 
-    # Await the completion of subnet generation
-    subnets_to_block = await async_generate_subnets_to_avoid(ip_addresses_to_avoid, subnets_to_avoid)
-    
-    delete_cmd = ["netsh", "advfirewall", "firewall", "delete", "rule", "name=Chess-Block-Other"]
-    process_delete = subprocess.run(delete_cmd, check=False, capture_output=True, text=True)
-    
-    if process_delete.returncode != 0:
-        stderr_output = process_delete.stderr
-        if "No rules match the specified criteria" in stderr_output:
-            logging.info("No existing Chess-Block-Other rules found. Proceeding.")
+    if config.get("enable_firewall_subnet_blocking", False):
+        # Await the completion of subnet generation
+        subnets_to_block = await async_generate_subnets_to_avoid(ip_addresses_to_avoid, subnets_to_avoid)
+
+        delete_cmd = ["netsh", "advfirewall", "firewall", "delete", "rule", "name=Chess-Block-Other"]
+        process_delete = subprocess.run(delete_cmd, check=False, capture_output=True, text=True)
+
+        if process_delete.returncode != 0:
+            stderr_output = process_delete.stderr
+            if "No rules match the specified criteria" in stderr_output:
+                logging.info("No existing Chess-Block-Other rules found. Proceeding.")
+            else:
+                logging.error(f"Failed to delete rule: {stderr_output}")
         else:
-            logging.error(f"Failed to delete rule: {stderr_output}")
-    else:
-        logging.info("Existing Chess-Block-Other rules removed from Windows Firewall.")
+            logging.info("Existing Chess-Block-Other rules removed from Windows Firewall.")
 
-    # Combine the subnets into a comma-separated string
-    subnets_combined = ",".join(subnets_to_block)
+        # Combine the subnets into a comma-separated string
+        subnets_combined = ",".join(subnets_to_block)
 
-    # Create a single block rule for all subnets
-    block_cmd = [
-        "netsh", "advfirewall", "firewall", "add", "rule", "name=Chess-Block-Other",
-        "dir=in", "action=block", "protocol=TCP", "localport=" + ports,
-        "remoteip=" + subnets_combined, "enable=yes"
-    ]
-    process_block = subprocess.run(block_cmd, check=False, capture_output=True, text=True)
-    if process_block.returncode != 0:
-        logging.error(f"Failed to add block rule: {process_block.stderr}")
-    else:
-        logging.info(f"Blocked inbound traffic for subnets {subnets_combined} on ports {ports}.")
+        # Create a single block rule for all subnets
+        block_cmd = [
+            "netsh", "advfirewall", "firewall", "add", "rule", "name=Chess-Block-Other",
+            "dir=in", "action=block", "protocol=TCP", "localport=" + ports,
+            "remoteip=" + subnets_combined, "enable=yes"
+        ]
+        process_block = subprocess.run(block_cmd, check=False, capture_output=True, text=True)
+        if process_block.returncode != 0:
+            logging.error(f"Failed to add block rule: {process_block.stderr}")
+        else:
+            logging.info(f"Blocked inbound traffic for subnets {subnets_combined} on ports {ports}.")
+            
         
         
 async def engine_communication(engine_process, writer, log_file):
@@ -272,7 +276,7 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
     logging.info(f"Connection opened from {client_ip}")
     print(f"Connection opened from {client_ip}")
     
-    if config.get("enable_firewall_rules", False):
+    if config.get("enable_trusted_sources", False):
         # Check if the client IP belongs to any of the trusted subnets or trusted sources
         is_trusted_subnet = any(
             ipaddress.ip_address(client_ip) in ipaddress.ip_network(subnet)
@@ -282,20 +286,9 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
 
         if not (is_trusted_subnet or is_trusted_source):
             logging.warning(f"Untrusted connection attempt from {client_ip}")
+            check_connection_attempts(client_ip)  # Log the untrusted connection attempt
             writer.close()
             return
-
-    # Call check_connection_attempts regardless of enable_firewall_ip_blocking setting
-    check_connection_attempts(client_ip)
-
-    if config.get("enable_firewall_ip_blocking", False):
-        if client_ip not in config["trusted_sources"] and not any(ipaddress.ip_address(client_ip) in ipaddress.ip_network(subnet) for subnet in config["trusted_subnets"]):
-            if config["max_connection_attempts"] == 0:
-                logging.warning(f"Blocking IP {client_ip} instantly")
-                ports = ",".join(str(engine["port"]) for engine in ENGINES.values())
-                asyncio.create_task(block_ip_address(client_ip, ports))
-                writer.close()
-                return
 
     last_activity_time = time.time()  # Initialize last activity time
 
