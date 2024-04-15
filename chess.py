@@ -20,6 +20,8 @@ CUSTOM_VARIABLES = config["custom_variables"]
 MAX_CONNECTIONS = config["max_connections"]
 # Dictionary to store connection attempts for each IP address
 connection_attempts = {}
+# Dictionary to store connection attempts for subnets
+subnet_connection_attempts = {}
 
 # Configure logging
 if config["enable_server_log"]:
@@ -172,6 +174,53 @@ async def block_ip_address(ip_address, ports):
     logging.debug(f"Exiting block_ip_address for IP {ip_address}")
         
 
+async def block_subnet(subnet, ports):
+    logging.debug(f"Entering block_subnet for subnet {subnet}")
+    if not all(ipaddress.ip_network(subnet).is_global for subnet in [subnet]):
+        logging.warning(f"Skipping blocking of non-global subnet: {subnet}")
+        return
+
+    # Check if the subnet is already blocked
+    check_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", "name=Chess-Block-Other"]
+    process_check = subprocess.run(check_cmd, capture_output=True, text=True)
+
+    if process_check.returncode == 0:
+        # If the Chess-Block-Other rule exists, get the existing blocked subnets
+        existing_subnets = re.findall(r"RemoteIP:\s*(.*)", process_check.stdout)
+        if existing_subnets:
+            existing_subnets = existing_subnets[0].split(",")
+            if subnet in existing_subnets:
+                logging.info(f"Subnet {subnet} is already blocked by the Chess-Block-Other rule")
+                return
+        else:
+            existing_subnets = []
+
+        # Add the new subnet to the existing blocked subnets
+        updated_subnets = ",".join(existing_subnets + [subnet])
+        set_cmd = [
+            "netsh", "advfirewall", "firewall", "set", "rule", "name=Chess-Block-Other",
+            "new", "remoteip=" + updated_subnets
+        ]
+        process_set = subprocess.run(set_cmd, check=False, capture_output=True, text=True)
+        if process_set.returncode != 0:
+            logging.error(f"Failed to update the Chess-Block-Other rule with subnet {subnet}: {process_set.stderr}")
+        else:
+            logging.info(f"Added subnet {subnet} to the existing Chess-Block-Other rule")
+    else:
+        # If the Chess-Block-Other rule doesn't exist, create a new rule
+        block_cmd = [
+            "netsh", "advfirewall", "firewall", "add", "rule", "name=Chess-Block-Other",
+            "dir=in", "action=block", "protocol=TCP", "localport=" + ports,
+            "remoteip=" + subnet, "enable=yes"
+        ]
+        process_block = subprocess.run(block_cmd, check=False, capture_output=True, text=True)
+        if process_block.returncode != 0:
+            logging.error(f"Failed to create block rule for subnet {subnet}: {process_block.stderr}")
+        else:
+            logging.info(f"Created new Chess-Block-Other rule and blocked subnet {subnet}")
+    logging.debug(f"Exiting block_subnet for subnet {subnet}")
+    
+    
 def check_connection_attempts(client_ip):
     if client_ip in config["trusted_sources"]:
         return
@@ -213,6 +262,30 @@ def check_connection_attempts(client_ip):
 
         # Remove the blocked IP from the connection_attempts dictionary
         connection_attempts.pop(client_ip, None)
+
+    # Track connection attempts from subnets
+    subnet = ipaddress.ip_network(f"{client_ip}/24", strict=False)
+    if subnet not in config["trusted_subnets"]:
+        if subnet not in subnet_connection_attempts:
+            subnet_connection_attempts[subnet] = []
+
+        subnet_connection_attempts[subnet].append(current_time)
+
+        if len(subnet_connection_attempts[subnet]) > config["max_connection_attempts_from_untrusted_subnet"]:
+            if config["enable_subnet_connection_attempt_blocking"]:
+                logging.warning(f"Blocking subnet {subnet} due to excessive connection attempts")
+                ports = ",".join(str(engine["port"]) for engine in ENGINES.values())
+                asyncio.create_task(block_subnet(str(subnet), ports))
+
+            # Log subnet blocking event
+            if config["Log_untrusted_connection_attempts"]:
+                log_message = f"Subnet {subnet} blocked due to excessive connection attempts. Attempt count: {len(subnet_connection_attempts[subnet])}"
+                logging.warning(log_message)
+                with open(os.path.join(BASE_LOG_DIR, "untrusted_connection_attempts.log"), "a") as f:
+                    f.write(log_message + "\n")
+
+            # Remove the blocked subnet from the subnet_connection_attempts dictionary
+            subnet_connection_attempts.pop(subnet, None)
         
         
 
@@ -259,6 +332,52 @@ async def configure_firewall(config):
             
         
         
+async def unblock_trusted_ips_and_subnets():
+    # Get the existing blocked IPs from the Chess-Block-IPs rule
+    check_ips_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", "name=Chess-Block-IPs"]
+    process_check_ips = subprocess.run(check_ips_cmd, capture_output=True, text=True)
+
+    if process_check_ips.returncode == 0:
+        existing_ips = re.findall(r"RemoteIP:\s*(.*)", process_check_ips.stdout)
+        if existing_ips:
+            existing_ips = existing_ips[0].split(",")
+            updated_ips = [ip for ip in existing_ips if ip not in config["trusted_sources"]]
+            if len(updated_ips) < len(existing_ips):
+                updated_ips_str = ",".join(updated_ips)
+                set_ips_cmd = [
+                    "netsh", "advfirewall", "firewall", "set", "rule", "name=Chess-Block-IPs",
+                    "new", "remoteip=" + updated_ips_str
+                ]
+                process_set_ips = subprocess.run(set_ips_cmd, check=False, capture_output=True, text=True)
+                if process_set_ips.returncode != 0:
+                    logging.error(f"Failed to update the Chess-Block-IPs rule: {process_set_ips.stderr}")
+                else:
+                    logging.info("Removed trusted IP addresses from Chess-Block-IPs rule")
+
+    # Get the existing blocked subnets from the Chess-Block-Other rule
+    check_subnets_cmd = ["netsh", "advfirewall", "firewall", "show", "rule", "name=Chess-Block-Other"]
+    process_check_subnets = subprocess.run(check_subnets_cmd, capture_output=True, text=True)
+
+    if process_check_subnets.returncode == 0:
+        existing_subnets = re.findall(r"RemoteIP:\s*(.*)", process_check_subnets.stdout)
+        if existing_subnets:
+            existing_subnets = existing_subnets[0].split(",")
+            updated_subnets = [subnet for subnet in existing_subnets if not any(ipaddress.ip_network(subnet).subnet_of(ipaddress.ip_network(trusted_subnet)) for trusted_subnet in config["trusted_subnets"])]
+            if len(updated_subnets) < len(existing_subnets):
+                updated_subnets_str = ",".join(updated_subnets)
+                set_subnets_cmd = [
+                    "netsh", "advfirewall", "firewall", "set", "rule", "name=Chess-Block-Other",
+                    "new", "remoteip=" + updated_subnets_str
+                ]
+                process_set_subnets = subprocess.run(set_subnets_cmd, check=False, capture_output=True, text=True)
+                if process_set_subnets.returncode != 0:
+                    logging.error(f"Failed to update the Chess-Block-Other rule: {process_set_subnets.stderr}")
+                else:
+                    logging.info("Removed trusted subnets from Chess-Block-Other rule")
+                    
+                    
+                    
+                    
 async def engine_communication(engine_process, writer, log_file):
     while True:
         try:
@@ -282,6 +401,7 @@ async def engine_communication(engine_process, writer, log_file):
             break
 
 
+
 async def client_handler(reader, writer, engine_path, log_file, engine_name):
     client_ip = writer.get_extra_info('peername')[0]
     logging.info(f"Connection opened from {client_ip}")
@@ -300,14 +420,16 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
             check_connection_attempts(client_ip)  # Log the untrusted connection attempt
             writer.close()
             return
-
+            
+    inactivity_timeout = config.get("inactivity_timeout", 900)  # Default to 900 seconds (15 minutes) if not specified
+    heartbeat_time = config.get("heartbeat_time", 300)  # Default to 300 seconds (5 minutes) if not specified
     last_activity_time = time.time()  # Initialize last activity time
 
     async def check_inactivity():
         nonlocal last_activity_time
         while True:
             await asyncio.sleep(60)  # Check every minute
-            if time.time() - last_activity_time > 900:  # 15 minutes of inactivity
+            if time.time() - last_activity_time > inactivity_timeout:
                 logging.warning(f"Connection to {client_ip} closed due to inactivity.")
                 writer.close()
                 return
@@ -345,7 +467,7 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
             )
             
             # Start heartbeat
-            heartbeat_task = asyncio.create_task(heartbeat(writer, 300))
+            heartbeat_task = asyncio.create_task(heartbeat(writer, heartbeat_time))
 
             async def process_command(command):
                 try:
@@ -385,59 +507,82 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
 
             async def process_client_commands():
                 while True:
-                    data = await reader.readline()
-                    if not data:
-                        break
+                    try:
+                        data = await asyncio.wait_for(reader.readline(), timeout=60)
+                        if not data:
+                            break
 
-                    client_data = data.decode().strip()
-                    commands = client_data.split('\n')
+                        client_data = data.decode().strip()
+                        commands = client_data.split('\n')
 
-                    for command in commands:
-                        command = command.strip()
-                        if command:
-                            if command.startswith('setoption name'):
-                                parts = command.split(' ')
-                                if len(parts) >= 5 and parts[1] == 'name' and parts[3] == 'value':
-                                    option_name = parts[2]
-                                    option_value = ' '.join(parts[4:])
-                                    if option_name in ENGINES[engine_name].get("custom_variables", {}):
-                                        if ENGINES[engine_name]["custom_variables"][option_name] == "override":
-                                            await process_command(command)
-                                        else:
-                                            modified_command = f"setoption name {option_name} value {ENGINES[engine_name]['custom_variables'][option_name]}"
+                        for command in commands:
+                            command = command.strip()
+                            if command:
+                                if command.startswith('setoption name'):
+                                    parts = command.split(' ')
+                                    if len(parts) >= 5 and parts[1] == 'name' and parts[3] == 'value':
+                                        option_name = parts[2]
+                                        option_value = ' '.join(parts[4:])
+                                        if option_name in ENGINES[engine_name].get("custom_variables", {}):
+                                            if ENGINES[engine_name]["custom_variables"][option_name] == "override":
+                                                await process_command(command)
+                                            else:
+                                                modified_command = f"setoption name {option_name} value {ENGINES[engine_name]['custom_variables'][option_name]}"
+                                                await process_command(modified_command)
+                                        elif option_name in CUSTOM_VARIABLES:
+                                            modified_command = f"setoption name {option_name} value {CUSTOM_VARIABLES[option_name]}"
                                             await process_command(modified_command)
-                                    elif option_name in CUSTOM_VARIABLES:
-                                        modified_command = f"setoption name {option_name} value {CUSTOM_VARIABLES[option_name]}"
-                                        await process_command(modified_command)
+                                        else:
+                                            await process_command(command)
                                     else:
                                         await process_command(command)
                                 else:
                                     await process_command(command)
-                            else:
-                                await process_command(command)
+                    except asyncio.TimeoutError:
+                        logging.warning(f"Timeout waiting for client command from {client_ip}")
+                        break
+                    except ConnectionResetError as e:
+                        logging.warning(f"Connection reset while processing client command from {client_ip}: {e}")
+                        break
+                    except Exception as e:
+                        logging.error(f"Error processing client command from {client_ip}: {e}")
+                        break
 
             async def process_engine_responses():
                 while True:
-                    data = await engine_process.stdout.readline()
-                    if not data:
+                    try:
+                        data = await asyncio.wait_for(engine_process.stdout.readline(), timeout=60)
+                        if not data:
+                            break
+                        decoded_data = data.decode().strip()
+                        writer.write(data)
+                        await writer.drain()
+                        if config["enable_uci_log"]:
+                            with open(log_file, "a") as f:
+                                f.write(f"Engine: {decoded_data}\n")
+                        if config["detailed_log_verbosity"]:
+                            print(f"Engine: {decoded_data}")
+                    except asyncio.TimeoutError:
+                        logging.warning(f"Timeout waiting for engine response for {client_ip}")
                         break
-                    decoded_data = data.decode().strip()
-                    writer.write(data)
-                    await writer.drain()
-                    if config["enable_uci_log"]:
-                        with open(log_file, "a") as f:
-                            f.write(f"Engine: {decoded_data}\n")
-                    if config["detailed_log_verbosity"]:
-                        print(f"Engine: {decoded_data}")
+                    except ConnectionResetError as e:
+                        logging.warning(f"Connection reset while processing engine response for {client_ip}: {e}")
+                        break
+                    except Exception as e:
+                        logging.error(f"Error processing engine response for {client_ip}: {e}")
+                        break
 
-            await asyncio.gather(process_client_commands(), process_engine_responses())
+            try:
+                await asyncio.gather(process_client_commands(), process_engine_responses())
+            except Exception as e:
+                logging.error(f"Error in command processing for client {client_ip}: {e}")
 
         except ConnectionResetError as e:
-            logging.info(f"Client {client_ip} disconnected: {e}")
+            logging.warning(f"Client {client_ip} disconnected: {e}")
             print(f"Client {client_ip} disconnected")
         except asyncio.IncompleteReadError as e:
-            logging.info(f"Client {client_ip} disconnected: {e}")
-            print(f"Client {client_ip} disconnected")
+            logging.warning(f"Incomplete read from client {client_ip}: {e}")
+            print(f"Incomplete read from client {client_ip}")
         except asyncio.TimeoutError as e:
             logging.warning(f"Connection timeout for client {client_ip}: {e}")
             print(f"Connection timeout for client {client_ip}")
@@ -462,6 +607,7 @@ async def client_handler(reader, writer, engine_path, log_file, engine_name):
                     pass
             logging.info(f"Connection closed for client {client_ip}")
             print(f"Connection closed for client {client_ip}")
+
 
 
 async def start_server(host, port, engine_path, log_file, engine_name):
@@ -494,6 +640,7 @@ async def start_server(host, port, engine_path, log_file, engine_name):
 
 
 async def main():
+    await unblock_trusted_ips_and_subnets()
     BASE_LOG_DIR = config.get("base_log_dir", "")
 
     if config["enable_server_log"] or config["enable_uci_log"]:
@@ -541,6 +688,7 @@ async def main():
             ]
         )
 
+    watchdog_timer_interval = config.get("watchdog_timer_interval", 300)  # Default to 300 seconds (5 minutes) if not specified
     tasks = []
     for engine_name, details in ENGINES.items():
         log_file = os.path.join(BASE_LOG_DIR, f"communication_log_{engine_name}.txt")
@@ -549,7 +697,7 @@ async def main():
         logging.info(f"Started server for {engine_name} on port {details['port']}")
 
     # Start watchdog timer
-    watchdog_task = asyncio.create_task(watchdog_timer(300))  # Check every 5 minutes
+    watchdog_task = asyncio.create_task(watchdog_timer(watchdog_timer_interval))
 
     # Set up signal handlers for graceful shutdown
     shutdown_event = asyncio.Event()
